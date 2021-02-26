@@ -36,7 +36,8 @@ function Get-MediaInfo
     [CmdletBinding()]
     [Alias('gmi')]
     Param(
-        [parameter(ValueFromPipelineByPropertyName)]
+        [parameter(ValueFromPipelineByPropertyName,
+        ValueFromRemainingArguments=$true)]
         [Alias('FullName')]
         [string[]] $Path,
 
@@ -53,12 +54,19 @@ function Get-MediaInfo
     {
         foreach ($file in $Path)
         {
-            $file = Convert-Path -LiteralPath $file
-
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf))
-            {
+            $file = $file -replace '`(\[|\]|\.|\*)' ,'$1'
+            try {
+                $file = Convert-Path -LiteralPath $file
+                if (-not (Test-Path -LiteralPath $file -PathType Leaf))
+                {
+                    continue
+                }
+            }
+            catch {
+                Write-Host $_
                 continue
             }
+            
 
             $extension = [IO.Path]::GetExtension($file).TrimStart([char]'.')
             $chacheFileBase = $file + '-' + (Get-Item -LiteralPath $file).Length + '-' + $cacheVersion
@@ -109,10 +117,13 @@ function Get-MediaInfo
                         DAR            = ConvertStringToDouble $mi.GetInfo('Video', 0, 'DisplayAspectRatio')
                         Width          = ConvertStringToInt $mi.GetInfo('Video', 0, 'Width')
                         Height         = ConvertStringToInt $mi.GetInfo('Video', 0, 'Height')
-                        BitRate        = (ConvertStringToInt $mi.GetInfo('Video', 0, 'BitRate')) / 1000
+                        BitRate        = (ConvertStringToInt $mi.GetInfo('General', 0, 'OverallBitRate')) / 1000
+                        VideoBitRate   = (ConvertStringToInt $mi.GetInfo('Video', 0, 'BitRate')) / 1000
+                        AudioBitRate   = (ConvertStringToInt $mi.GetInfo('Audio', 0, 'BitRate')) / 1000
                         Duration       = (ConvertStringToDouble $mi.GetInfo('General', 0, 'Duration')) / 60000
                         FileSize       = (ConvertStringToLong $mi.GetInfo('General', 0, 'FileSize')) / 1024 / 1024
                         FrameRate      = ConvertStringToDouble $mi.GetInfo('Video', 0, 'FrameRate')
+                        VideoCodec     = $mi.GetInfo('General', 0, 'Video_Codec_List')
                         AudioCodec     = $mi.GetInfo('General', 0, 'Audio_Codec_List')
                         TextFormat     = $mi.GetInfo('General', 0, 'Text_Format_List')
                         ScanType       = $mi.GetInfo('Video',   0, 'ScanType')
@@ -146,8 +157,9 @@ function Get-MediaInfo
                         Album       = $mi.GetInfo('General', 0, 'Album')
                         Year        = $mi.GetInfo('General', 0, 'Recorded_Date')
                         Genre       = $mi.GetInfo('General', 0, 'Genre')
+                        AudioCodec  = $mi.GetInfo('General', 0, 'Audio_Codec_List')
                         Duration    = (ConvertStringToDouble $mi.GetInfo('General', 0, 'Duration')) / 60000
-                        BitRate     = (ConvertStringToInt $mi.GetInfo('Audio', 0, 'BitRate')) / 1000
+                        AudioBitRate= (ConvertStringToInt $mi.GetInfo('Audio', 0, 'BitRate')) / 1000
                         FileSize    = (ConvertStringToLong $mi.GetInfo('General', 0, 'FileSize')) / 1024 / 1024
                         Directory   = [IO.Path]::GetDirectoryName($file)
                     }
@@ -188,7 +200,19 @@ function Get-MediaInfoValue
 
     Process
     {
-        $mi = New-Object -TypeName MediaInfoSharp -ArgumentList (Convert-Path -LiteralPath $Path)
+        $file = $Path -replace '`(\[|\]|\.|\*)' ,'$1'
+        try {
+            $file = Convert-Path -LiteralPath $file
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf))
+            {
+                return $null
+            }
+        }
+        catch {
+            Write-Host $_
+            return $null
+        }
+        $mi = New-Object -TypeName MediaInfoSharp -ArgumentList $file
         $value = $mi.GetInfo($Kind, $Index, $Parameter)
         $mi.Dispose()
         return $value
@@ -221,9 +245,37 @@ function Get-MediaInfoSummary
 
     Process
     {
-        $mi = New-Object -TypeName MediaInfoSharp -ArgumentList (Convert-Path -LiteralPath $Path)
+        $file = $Path -replace '`(\[|\]|\.|\*)' ,'$1'
+        try {
+            $file = Convert-Path -LiteralPath $file
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf))
+            {
+                return $null
+            }
+        }
+        catch {
+            Write-Host $_
+            return $null
+        }
+        $mi = New-Object -TypeName MediaInfoSharp -ArgumentList $file
         $value = $mi.GetSummary($Full, $Raw)
         $mi.Dispose()
-        ("`r`n" + $value) -split "`r`n"
+        $Dictionary = @{}
+        $Kind = ''
+        foreach ($line in ($value -split "`r`n")) {
+            if (!$line.trim()) {
+                continue
+            }
+            $index = $line.IndexOf(":")
+            if ($index -ne -1) {
+                $Dictionary[$Kind][$line.substring(0,$index).trim()] = $line.substring(($index+2))
+            }
+            else {
+                $Kind = $line.trim()
+                $Dictionary[$Kind] = @{}
+            }
+        }
+        $Dictionary
+        #("`r`n" + $value) -split "`r`n"
     }
 }
