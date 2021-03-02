@@ -54,7 +54,7 @@ function Get-MediaInfo
     {
         foreach ($file in $Path)
         {
-            $file = $file -replace '`(\[|\]|\.|\*)' ,'$1'
+            $file = [Management.Automation.WildcardPattern]::Unescape($file)
             try {
                 $file = Convert-Path -LiteralPath $file
                 if (-not (Test-Path -LiteralPath $file -PathType Leaf))
@@ -200,7 +200,7 @@ function Get-MediaInfoValue
 
     Process
     {
-        $file = $Path -replace '`(\[|\]|\.|\*)' ,'$1'
+        $file = [Management.Automation.WildcardPattern]::Unescape($Path)
         try {
             $file = Convert-Path -LiteralPath $file
             if (-not (Test-Path -LiteralPath $file -PathType Leaf))
@@ -245,7 +245,7 @@ function Get-MediaInfoSummary
 
     Process
     {
-        $file = $Path -replace '`(\[|\]|\.|\*)' ,'$1'
+        $file = [Management.Automation.WildcardPattern]::Unescape($Path)
         try {
             $file = Convert-Path -LiteralPath $file
             if (-not (Test-Path -LiteralPath $file -PathType Leaf))
